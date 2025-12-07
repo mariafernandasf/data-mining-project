@@ -195,7 +195,7 @@ def main(args):
 
     teacher_model = None
 
-    output_dir = Path(args.output_dir)
+    output_dir = Path(args.output_dir + args.data_set + "/")
 
     # RESUME FROM CHECKPOINT 
     if args.resume:
