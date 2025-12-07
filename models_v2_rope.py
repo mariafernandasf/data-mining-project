@@ -212,6 +212,7 @@ class rope_vit_models(vit_models):
         
         return x
 
+# ------------ 16x16 PATCH MODELS ------------
 # RoPE-Axial
 @register_model
 def rope_axial_deit_small_patch16_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
@@ -252,7 +253,7 @@ def rope_mixed_ape_deit_small_patch16_LS(pretrained=False, img_size=224, pretrai
     model.default_cfg = _cfg()
     return model
 
-
+# ------------ 8x8 PATCH MODELS ------------
 # RoPE-Axial
 @register_model
 def rope_axial_deit_small_patch8_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):

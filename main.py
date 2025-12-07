@@ -19,6 +19,7 @@ import utils
 from augment import new_data_aug_generator
 import models_v2
 import models_v2_rope
+import models_cayley
 from samplers import RASampler
 
 import numpy as np
