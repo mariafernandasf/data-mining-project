@@ -12,17 +12,17 @@ ARGS = {
         "batch_size": 256, # batch size for training: 256, batch size for eval: 128
         "input_size" : 224, # 224 for training, 144, 192, 224, 256, 320, 384, 512 for testing
 
-        "output_dir" : "ieor6617_output/A100/",
+        "output_dir" : "output/A100/",
         "train_mode" : True,
         "device" : "cuda", # cpu or cuda
         "seed": 0,
         "pin_mem": False, # Pin CPU memory in DataLoader for more efficient transfer to GPU
        
         # model training params
-        "resume": "", # resume from checkpoint i.e. ieor6617_output/rope_axial_ape_deit_small_patch16_LS/checkpoint.pth
+        "resume": "", # resume from checkpoint i.e. output/A100/deit_small_patch16_LS/checkpoint.pth
         "start_epoch": 0, # epoch to resume from
         "epochs": 100, # num epochs
-        "model" : "rope_axial_ape_deit_small_patch16_LS",
+        "model" : "cayleySTRING_regular_deit_small_patch16_LS",
         "drop"  : 0.0, # dropout rate
         "drop_path" : 0.0, # dropout path rate
         "bce_loss": True,
