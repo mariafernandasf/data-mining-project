@@ -120,7 +120,7 @@ def main(args):
 
     # finetune
     if args.finetune:
-        checkpoint = torch.load(args.finetune, map_location='cpu')
+        checkpoint = torch.load(args.finetune, map_location='cpu', weights_only = False)
         checkpoint_model = checkpoint['model']
         
         state_dict = model.state_dict()
