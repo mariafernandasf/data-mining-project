@@ -71,6 +71,9 @@ def new_data_aug_generator(args = None):
     elif args.data_set == 'CIFAR100':
         mean = (0.5071, 0.4867, 0.4408)
         std = (0.2675, 0.2565, 0.2761)
+    elif args.data_set == 'MNIST':
+        mean = (0.1307, 0.1307, 0.1307)
+        std = (0.3081, 0.3081, 0.3081)
     else:
         mean = IMAGENET_DEFAULT_MEAN
         std = IMAGENET_DEFAULT_STD
@@ -90,6 +93,10 @@ def new_data_aug_generator(args = None):
                 img_size, scale=scale, interpolation=interpolation),
             transforms.RandomHorizontalFlip()
         ]
+    
+    # MNIST-specific: convert grayscale to 3-channel
+    if args.data_set == 'MNIST':
+        primary_tfl.append(transforms.Grayscale(num_output_channels=3))
 
         
     secondary_tfl = [transforms.RandomChoice([gray_scale(p=1.0),
