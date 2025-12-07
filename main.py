@@ -195,7 +195,7 @@ def main(args):
 
     teacher_model = None
 
-    output_dir = Path(args.output_dir + args.data_set + "/")
+    output_dir = Path(args.output_dir)
 
     # RESUME FROM CHECKPOINT 
     if args.resume:
@@ -317,8 +317,8 @@ if __name__ == '__main__':
     torch.cuda.empty_cache()
     args = const.ARGS
 
-    # add model name to output directory
-    args["output_dir"] = args["output_dir"] + args["model"]
+    # add model name and dataset to output directory
+    args["output_dir"] = args["output_dir"] + args["data_set"] + "/" + args["model"]
     print('\n\nOutput dir: {}\n\n'.format(args["output_dir"]))
 
     Path(args["output_dir"]).mkdir(parents=True, exist_ok=True)
