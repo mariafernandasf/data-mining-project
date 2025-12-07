@@ -27,6 +27,12 @@ def build_dataset(is_train, args):
                                     transform=transform,
                                     download = True)
         nb_classes = 100
+    elif args.data_set == "MNIST":
+        dataset = datasets.MNIST(root = "data/", 
+                                    train=is_train, 
+                                    transform=transform,
+                                    download = True)
+        nb_classes = 10
     else:
         raise Exception("Invalid dataset.")
     
@@ -35,6 +41,30 @@ def build_dataset(is_train, args):
 
 def build_transform(is_train, args):
     resize_im = args.input_size > 32
+    
+    # MNIST SPECIFIC CASE:
+    if args.data_set == 'MNIST':
+        if is_train:
+            return transforms.Compose([
+                transforms.Resize(args.input_size),
+                # code expects 3 channel input
+                transforms.Grayscale(num_output_channels=3),
+                transforms.RandomCrop(args.input_size, padding=4),
+                transforms.RandomRotation(10),
+                transforms.ToTensor(),
+                transforms.Normalize((0.1307, 0.1307, 0.1307), 
+                                     (0.3081, 0.3081, 0.3081))
+            ])
+        else: # eval MNIST
+            return transforms.Compose([
+                transforms.Resize(args.input_size),
+                transforms.Grayscale(num_output_channels=3),
+                transforms.ToTensor(),
+                transforms.Normalize((0.1307, 0.1307, 0.1307), 
+                                     (0.3081, 0.3081, 0.3081))
+            ])
+    
+    # GENERAL CASE:
     if is_train:
         # this should always dispatch to transforms_imagenet_train
         transform = create_transform(
