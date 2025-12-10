@@ -97,27 +97,31 @@ class CayleySTRINGAttention(Attention):
     def apply_sparse_cayley_fixed_f(self, z):
         B, num_heads, N, head_dim = z.shape
         out = torch.empty_like(z)
-        I = get_I_sparse(head_dim).to(device = z.device, dtype = torch.float32) # (head_dim, head_dim)
-        original_dtype = z.dtype
-        for head in range(num_heads):
-            S_head = self.S_cayley_sparse_fixed_f(head).to(device = z.device, dtype = torch.float32)
-            z_head = z[:, head, :,:]
-            z_head = z_head.reshape(B*N, head_dim)
-            
-            I_minus_S = I - S_head
-            I_plus_S = I + S_head
 
-            rhs = z_head.t().to(torch.float32)  # (head_dim, B*N)
-            
-            original_dtype = z_head.dtype
-            A = I_plus_S.to(torch.float32)                 # (head_dim, head_dim)
-            x_head = torch.linalg.solve(A, rhs)           # (head_dim, B*N), x_head is dense
+        with torch.amp.autocast(enabled=False):
 
-            x_head = torch.clamp(x_head, -65500, 65500).to(original_dtype)
-            result = torch.sparse.mm(I_minus_S, x_head) # I_minus_S is sparse
-            result = result.t().reshape(B, N, head_dim)  
-            
-            out[:, head,:, :] = result
+            I = get_I_sparse(head_dim).to(device = z.device, dtype = torch.float32) # (head_dim, head_dim)
+            original_dtype = z.dtype
+            for head in range(num_heads):
+                S_head = self.S_cayley_sparse_fixed_f(head).to(device = z.device, dtype = torch.float32)
+                z_head = z[:, head, :,:]
+                z_head = z_head.reshape(B*N, head_dim)
+                
+                I_minus_S = I - S_head
+                I_plus_S = I + S_head
+
+                rhs = z_head.t().to(torch.float32)  # (head_dim, B*N)
+                
+                A = I_plus_S.to_dense().to(torch.float32)                 # (head_dim, head_dim)
+                x_head = torch.linalg.solve(A, rhs)           # (head_dim, B*N), x_head is dense
+                
+                x_head = x_head.to(torch.float32)
+                I_minus_S = I_minus_S.to(torch.float32)
+                result = torch.sparse.mm(I_minus_S, x_head) # I_minus_S is sparse
+                result = result.t().reshape(B, N, head_dim) 
+                result = torch.clamp(result, -65500, 65500).to(original_dtype)
+                
+                out[:, head,:, :] = result
 
         return out
     
