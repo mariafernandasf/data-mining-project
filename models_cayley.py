@@ -33,7 +33,8 @@ def get_I_sparse(head_dim: int) -> torch.sparse.Tensor:
 class CayleySTRINGAttention(Attention):
     """Multi-head Attention block with Cayley-STRING embeddings."""
     def __init__ (self, dim, num_heads, qkv_bias, qk_scale, attn_drop, proj_drop,
-                  reflection_variant=False, sparse_variant_fixed_f=False, sparsity_f=0.8):
+                  reflection_variant=False, sparse_variant_fixed_f=False, sparsity_f=0.8,
+                  use_sparse_linear_solver=False):
         super().__init__(dim, num_heads, qkv_bias, qk_scale, attn_drop, proj_drop)
                 
         head_dim = dim // num_heads
@@ -42,7 +43,7 @@ class CayleySTRINGAttention(Attention):
         self.reflection_variant = reflection_variant
         self.sparse_variant_fixed_f = sparse_variant_fixed_f
         self.sparsity_f = sparsity_f
-
+        self.use_sparse_linear_solver = use_sparse_linear_solver
         if self.reflection_variant:
             n = 0.01 * torch.randn(num_heads, head_dim)
             self.n_reflect = nn.Parameter(n)
@@ -93,28 +94,44 @@ class CayleySTRINGAttention(Attention):
         S_head = M_head - M_head.transpose(0, 1)
         return S_head.coalesce()
 
-
+    def sparse_linear_solver(self, I_plus_S, z_head_T, B, N):
+        I_plus_S = I_plus_S.to_sparse_csr()
+        xs = []
+        for i in range(B*N):
+            rhs = z_head_T[:, i]
+            x_i = torch.sparse.spsolve(I_plus_S, rhs)
+            xs.append(x_i.unsqueeze(1))
+        x_head = torch.cat(xs, dim=1)  # (head_dim, B*N)
+        return x_head
+    
+    def dense_linear_solver(self, I_plus_S, z_head_T):
+        A = I_plus_S.to_dense().to(torch.float32)                 # (head_dim, head_dim)
+        x_head = torch.linalg.solve(A, z_head_T)           # (head_dim, B*N), x_head is dense
+        return x_head        
+    
     def apply_sparse_cayley_fixed_f(self, z):
         B, num_heads, N, head_dim = z.shape
         out = torch.empty_like(z)
-
-        with torch.amp.autocast(enabled=False):
+       
+        with torch.amp.autocast(device_type=z.device.type, enabled=False):
 
             I = get_I_sparse(head_dim).to(device = z.device, dtype = torch.float32) # (head_dim, head_dim)
             original_dtype = z.dtype
+
             for head in range(num_heads):
                 S_head = self.S_cayley_sparse_fixed_f(head).to(device = z.device, dtype = torch.float32)
-                z_head = z[:, head, :,:]
-                z_head = z_head.reshape(B*N, head_dim)
+                z_head = z[:, head, :,:].reshape(B*N, head_dim)
                 
                 I_minus_S = I - S_head
                 I_plus_S = I + S_head
 
-                rhs = z_head.t().to(torch.float32)  # (head_dim, B*N)
+                z_head_T = z_head.t().to(torch.float32)  # (head_dim, B*N)
                 
-                A = I_plus_S.to_dense().to(torch.float32)                 # (head_dim, head_dim)
-                x_head = torch.linalg.solve(A, rhs)           # (head_dim, B*N), x_head is dense
-                
+                if self.use_sparse_linear_solver:
+                    x_head = self.sparse_linear_solver(I_plus_S, z_head_T, B, N)
+                else:
+                    x_head = self.dense_linear_solver(I_plus_S, z_head_T)
+  
                 x_head = x_head.to(torch.float32)
                 I_minus_S = I_minus_S.to(torch.float32)
                 result = torch.sparse.mm(I_minus_S, x_head) # I_minus_S is sparse
@@ -300,7 +317,8 @@ def cayleySTRING_sparse_fixed20pct_deit_small_patch8_LS(pretrained=False, img_si
         norm_layer=partial(nn.LayerNorm, eps=1e-6), block_layers=Cayley_STRING_Layer_scale_init_Block, 
         Attention_block=partial(CayleySTRINGAttention, 
                                 sparse_variant_fixed_f=True,
-                                sparsity_f = 0.2),
+                                sparsity_f = 0.2,
+                                use_sparse_linear_solver=False),
         rope_theta=100.0, **kwargs)
     model.default_cfg = _cfg()
     return model
