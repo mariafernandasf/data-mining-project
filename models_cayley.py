@@ -322,3 +322,17 @@ def cayleySTRING_sparse_fixed20pct_deit_small_patch8_LS(pretrained=False, img_si
         rope_theta=100.0, **kwargs)
     model.default_cfg = _cfg()
     return model
+
+# Cayley-STRING sparse-variant fixed f=10%
+@register_model
+def cayleySTRING_sparse_fixed10pct_deit_small_patch8_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
+    model = cayley_STRING_vit_models(
+        img_size = img_size, patch_size=8, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), block_layers=Cayley_STRING_Layer_scale_init_Block, 
+        Attention_block=partial(CayleySTRINGAttention, 
+                                sparse_variant_fixed_f=True,
+                                sparsity_f = 0.1,
+                                use_sparse_linear_solver=False),
+        rope_theta=100.0, **kwargs)
+    model.default_cfg = _cfg()
+    return model
