@@ -1,0 +1,1 @@
+{"num_test_images": 10000, "acc1": "89.0%", "acc5": "99.2%", "loss": 0.3681290077586328, "eval_time_str": "0:00:46", "eval_time_seconds": 46.04855036735535, "input_size": 224, "start_epoch": 0, "epochs": 100}
