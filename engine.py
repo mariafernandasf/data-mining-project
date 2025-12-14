@@ -19,7 +19,12 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
                     model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None,
-                    set_training_mode=True, args = None):
+                    set_training_mode=True, args = None, 
+                    global_step = 0, 
+                    sparse_learnable_variant = False,
+                    lambda_l0 = 0.0,
+                    r = 1e-5,
+                    N_tau = 500):
     
     # set model to training mode
     model.train(set_training_mode)
@@ -34,6 +39,13 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
 
+        # update gumbel sigmoid tau for sparse attention
+        if (global_step % N_tau == 0) and sparse_learnable_variant:
+            tau = max(0.5, math.exp(-r * global_step))
+            for blk in model.blocks:
+                if hasattr(blk, "attn"):
+                    blk.attn.set_tau(tau)
+
         if mixup_fn is not None:
             samples, targets = mixup_fn(samples, targets)
             
@@ -45,6 +57,15 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             outputs = model(samples)
             loss = criterion(outputs, targets)
 
+            if sparse_learnable_variant:
+                sparsity_loss = 0.0
+                # sum L0 penalties over all attention blocks
+                for blk in model.blocks:
+                    if hasattr(blk, "attn"):
+                        sparsity_loss = sparsity_loss + blk.attn.l0_penalty()
+                
+                loss = loss + lambda_l0 * sparsity_loss 
+        
         loss_value = loss.item()
 
         if not math.isfinite(loss_value):
@@ -65,10 +86,11 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         metric_logger.update(loss=loss_value)
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
 
+        global_step += 1
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}, global_step
 
 
 @torch.no_grad()

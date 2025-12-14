@@ -12,7 +12,7 @@ ARGS = {
         "batch_size": 256, # batch size for training: 256, batch size for eval: 128
         "input_size" : 224, # 224 for training, 144, 192, 224, 256, 320, 384, 512 for testing
 
-        "output_dir" : "output/A100/",
+        "output_dir" : "output/A100/DEV/",
         "train_mode" : True,
         "device" : "cuda", # cpu or cuda
         "seed": 0,
@@ -21,8 +21,9 @@ ARGS = {
         # model training params
         "resume": "", # resume from checkpoint i.e. output/A100/deit_small_patch16_LS/checkpoint.pth
         "start_epoch": 0, # epoch to resume from
-        "epochs": 100, # num epochs
+        "epochs": 1, # num epochs
         "model" : "cayleySTRING_regular_deit_small_patch16_LS",
+        "sparse_learnable_variant": False, # whether to use sparse learnable attention variant
         "drop"  : 0.0, # dropout rate
         "drop_path" : 0.0, # dropout path rate
         "bce_loss": True,

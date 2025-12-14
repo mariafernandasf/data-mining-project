@@ -34,7 +34,9 @@ class CayleySTRINGAttention(Attention):
     """Multi-head Attention block with Cayley-STRING embeddings."""
     def __init__ (self, dim, num_heads, qkv_bias, qk_scale, attn_drop, proj_drop,
                   reflection_variant=False, sparse_variant_fixed_f=False, sparsity_f=0.8,
-                  use_sparse_linear_solver=False):
+                  use_sparse_linear_solver=False, 
+                  sparse_variant_learnable=False, 
+                  tau = 1.0):
         super().__init__(dim, num_heads, qkv_bias, qk_scale, attn_drop, proj_drop)
                 
         head_dim = dim // num_heads
@@ -44,9 +46,12 @@ class CayleySTRINGAttention(Attention):
         self.sparse_variant_fixed_f = sparse_variant_fixed_f
         self.sparsity_f = sparsity_f
         self.use_sparse_linear_solver = use_sparse_linear_solver
+        self.sparse_variant_learnable = sparse_variant_learnable
+
         if self.reflection_variant:
             n = 0.01 * torch.randn(num_heads, head_dim)
             self.n_reflect = nn.Parameter(n)
+        
         elif self.sparse_variant_fixed_f:
             n_total = head_dim * (head_dim -1) //2 # upper triangular size
             n_keep = int(self.sparsity_f * head_dim * head_dim) # total nonzero entries
@@ -66,11 +71,45 @@ class CayleySTRINGAttention(Attention):
 
             nnz = row.numel()
             self.nnz_values = nn.Parameter(torch.randn(num_heads, nnz))
+        
+        elif self.sparse_variant_learnable:
+            self.values = nn.Parameter(torch.zeros(num_heads, head_dim, head_dim))
+            
+            # each head will have its own sparsity pattern
+            self.log_alpha = nn.Parameter(torch.zeros(num_heads, head_dim, head_dim))
+            self.tau = tau 
         else: 
             # S = M - M^T to ensure S is antisymmetric
             M = 0.01 * torch.randn(num_heads, head_dim, head_dim)
             self.M_cayley = nn.Parameter(M)
-        
+    
+    def set_tau(self, tau):
+        self.tau = tau
+
+    def l0_penalty(self):
+        """
+        Equation 12 in Louizos paper:
+        Sum(probability of gate being nonzero)
+        """
+        mask = torch.ones_like(self.log_alpha).triu(1)
+        prob = torch.sigmoid(self.log_alpha) * mask
+        return prob.sum()
+
+    def sparse_linear_solver(self, I_plus_S, z_head_T, B, N):
+        I_plus_S = I_plus_S.to_sparse_csr()
+        xs = []
+        for i in range(B*N):
+            rhs = z_head_T[:, i]
+            x_i = torch.sparse.spsolve(I_plus_S, rhs)
+            xs.append(x_i.unsqueeze(1))
+        x_head = torch.cat(xs, dim=1)  # (head_dim, B*N)
+        return x_head
+    
+    def dense_linear_solver(self, I_plus_S, z_head_T):
+        A = I_plus_S.to_dense().to(torch.float32)                 # (head_dim, head_dim)
+        x_head = torch.linalg.solve(A, z_head_T)           # (head_dim, B*N), x_head is dense
+        return x_head    
+    
     def S_cayley(self):
         """Antisymmetric matrix: S = M - M^T
         This ensures that S is remains antisymmetric after 
@@ -94,21 +133,51 @@ class CayleySTRINGAttention(Attention):
         S_head = M_head - M_head.transpose(0, 1)
         return S_head.coalesce()
 
-    def sparse_linear_solver(self, I_plus_S, z_head_T, B, N):
-        I_plus_S = I_plus_S.to_sparse_csr()
-        xs = []
-        for i in range(B*N):
-            rhs = z_head_T[:, i]
-            x_i = torch.sparse.spsolve(I_plus_S, rhs)
-            xs.append(x_i.unsqueeze(1))
-        x_head = torch.cat(xs, dim=1)  # (head_dim, B*N)
-        return x_head
-    
-    def dense_linear_solver(self, I_plus_S, z_head_T):
-        A = I_plus_S.to_dense().to(torch.float32)                 # (head_dim, head_dim)
-        x_head = torch.linalg.solve(A, z_head_T)           # (head_dim, B*N), x_head is dense
-        return x_head        
-    
+    def S_cayley_sparse_learnable(self):
+        mask = torch.ones_like(self.log_alpha).triu(1)
+
+        if self.training: 
+            # uniform distribution on [0,1]
+            u = torch.rand_like(self.log_alpha)
+            gumbel = -torch.log(-torch.log(u + 1e-8) + 1e-8)
+
+            #  ~ Gumbel(log_alpha, tau)
+            logits = (self.log_alpha + gumbel) / self.tau
+        else: 
+            logits = self.log_alpha
+        
+        z_soft = torch.sigmoid(logits)
+        z_hard = (z_soft > 0.5).float()
+        z = z_hard + (z_soft - z_hard).detach()  
+
+        z = z * mask  # zero out lower triangular and diagonal
+
+        # get values for upper triangular
+        S = z * self.values.triu(1)
+
+        # skew-symmetrize
+        S = S - S.transpose(-1, -2)
+
+        return S
+
+
+    def compute_s_nnz_percentage(self):
+        """Return average nnz percentage of S across heads for learnable sparse variant.
+        Uses the hard threshold (sigmoid(log_alpha) > 0.5) over the strict upper triangle
+        to estimate the active edges; skew-symmetry doubles nnz. Returns None if not applicable.
+        """
+        if not self.sparse_variant_learnable:
+            return None
+        with torch.no_grad():
+            mask = torch.ones_like(self.log_alpha).triu(1)
+            z = (torch.sigmoid(self.log_alpha) > 0.5).float() * mask  # (H, D, D) upper-tri gates
+            per_head_active = z.sum(dim=(-1, -2))  # (H,)
+            nnz_per_head = per_head_active * 2.0  # skew-symmetry mirrors to lower-tri
+            total_entries = float(self.head_dim * self.head_dim)
+            pct_per_head = nnz_per_head / total_entries
+            avg_pct = pct_per_head.mean().item()
+        return avg_pct
+
     def apply_sparse_cayley_fixed_f(self, z):
         B, num_heads, N, head_dim = z.shape
         original_dtype = z.dtype
@@ -142,6 +211,7 @@ class CayleySTRINGAttention(Attention):
 
         return out
     
+
     def apply_cayley_reflection_variant(self, z, eps = 1e-8):
         B, num_heads, N, head_dim = z.shape
         z_reshaped = z.permute(0,2,1,3).reshape(B*N, num_heads, head_dim)
@@ -175,7 +245,10 @@ class CayleySTRINGAttention(Attention):
         z_reshaped = z.permute(0,2,1,3).reshape(B*N, num_heads, head_dim)
         I = torch.eye(head_dim, device=z.device, dtype=z.dtype) # (head_dim, head_dim)
 
-        S = self.S_cayley().to(z.dtype) # (num_heads, head_dim, head_dim)
+        if self.sparse_variant_learnable:
+            S = self.S_cayley_sparse_learnable().to(z.dtype) # (num_heads, head_dim, head_dim)
+        else:
+            S = self.S_cayley().to(z.dtype) # (num_heads, head_dim, head_dim)
             
         # (I + S)
         # S = (num_heads, head_dim, head_dim), I = (head_dim, head_dim)
@@ -209,6 +282,7 @@ class CayleySTRINGAttention(Attention):
         elif self.sparse_variant_fixed_f:
             return self.apply_sparse_cayley_fixed_f(z)
         
+        # both regular and sparse learnable variant use same function
         return self.apply_regular_cayley(z)
 
 
@@ -310,6 +384,63 @@ def cayleySTRING_sparse_fixed10pct_deit_small_patch16_LS(pretrained=False, img_s
         Attention_block=partial(CayleySTRINGAttention, 
                                 sparse_variant_fixed_f=True,
                                 sparsity_f = 0.1),
+        rope_theta=100.0, **kwargs)
+    model.default_cfg = _cfg()
+    return model
+
+# Cayley-STRING sparse-variant fixed f=40%
+@register_model
+def cayleySTRING_sparse_fixed40pct_deit_small_patch16_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
+    model = cayley_STRING_vit_models(
+        img_size = img_size, patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), block_layers=Cayley_STRING_Layer_scale_init_Block, 
+        Attention_block=partial(CayleySTRINGAttention, 
+                                sparse_variant_fixed_f=True,
+                                sparsity_f = 0.4,
+                                use_sparse_linear_solver=False),
+        rope_theta=100.0, **kwargs)
+    model.default_cfg = _cfg()
+    return model
+
+# Cayley-STRING sparse-variant fixed f=35%
+@register_model
+def cayleySTRING_sparse_fixed35pct_deit_small_patch16_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
+    model = cayley_STRING_vit_models(
+        img_size = img_size, patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), block_layers=Cayley_STRING_Layer_scale_init_Block, 
+        Attention_block=partial(CayleySTRINGAttention, 
+                                sparse_variant_fixed_f=True,
+                                sparsity_f = 0.35,
+                                use_sparse_linear_solver=False),
+        rope_theta=100.0, **kwargs)
+    model.default_cfg = _cfg()
+    return model
+
+# Cayley-STRING sparse-variant fixed f=30%
+@register_model
+def cayleySTRING_sparse_learnable_deit_small_patch16_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
+    model = cayley_STRING_vit_models(
+        img_size = img_size, patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), block_layers=Cayley_STRING_Layer_scale_init_Block, 
+        Attention_block=partial(CayleySTRINGAttention, 
+                                sparse_variant_fixed_f=False,
+                                sparse_variant_learnable=True,
+                                tau = 1.0, # initialize gumbel sigmoid tau
+                                use_sparse_linear_solver=False),
+        rope_theta=100.0, sparse_variant_learnable = True, 
+        **kwargs)
+    model.default_cfg = _cfg()
+    return model
+
+# Cayley-STRING sparse-variant fixed f=15%
+@register_model
+def cayleySTRING_sparse_fixed15pct_deit_small_patch16_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
+    model = cayley_STRING_vit_models(
+        img_size = img_size, patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), block_layers=Cayley_STRING_Layer_scale_init_Block, 
+        Attention_block=partial(CayleySTRINGAttention, 
+                                sparse_variant_fixed_f=True,
+                                sparsity_f = 0.15),
         rope_theta=100.0, **kwargs)
     model.default_cfg = _cfg()
     return model

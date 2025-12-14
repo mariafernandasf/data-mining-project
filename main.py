@@ -86,6 +86,14 @@ def main(args):
         pin_memory=args.pin_mem,
         drop_last=True,
     )
+
+    # lambda weighting factor for sparse attention learnable variant
+    if args.data_set == "MNIST":
+        lambda_l0 = 0.1 / len(dataset_train)
+    else: 
+        lambda_l0 = 0.001 / len(dataset_train) # use CIFAR10 case for other datasets
+
+
     if args.ThreeAugment:
         data_loader_train.dataset.transform = new_data_aug_generator(args)
 
@@ -242,17 +250,21 @@ def main(args):
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
     max_accuracy = 0.0
+    global_step = 0
     for epoch in range(args.start_epoch, args.epochs):
         # distributed code
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
         # end distributed code
-        train_stats = train_one_epoch(
+        train_stats, global_step = train_one_epoch(
             model, criterion, data_loader_train,
             optimizer, device, epoch, loss_scaler,
             args.clip_grad, model_ema, mixup_fn,
             set_training_mode=args.train_mode,  # keep in eval mode for deit finetuning / train mode for training and deit III finetuning
-            args = args,
+            args = args, 
+            global_step = global_step, 
+            sparse_learnable_variant = args.sparse_learnable_variant,
+            lambda_l0 = lambda_l0
         )
 
         # update learning rate
@@ -272,6 +284,17 @@ def main(args):
 
         test_stats = evaluate(data_loader_val, model, device)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
+        # Log S sparsity for learnable sparse variant (average across attention blocks)
+        try:
+            sparsity_pcts = []
+            for m in model_without_ddp.modules():
+                if isinstance(m, models_cayley.CayleySTRINGAttention) and args.sparse_learnable_variant:
+                    pct = m.compute_s_nnz_percentage()
+                    if pct is not None:
+                        sparsity_pcts.append(pct)
+            avg_sparsity_pct = float(sum(sparsity_pcts) / len(sparsity_pcts)) if sparsity_pcts else None
+        except Exception:
+            avg_sparsity_pct = None
         
         if max_accuracy < test_stats["acc1"]:
             max_accuracy = test_stats["acc1"]
@@ -291,9 +314,10 @@ def main(args):
         print(f'Max accuracy: {max_accuracy:.2f}%')
 
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                        **{f'test_{k}': v for k, v in test_stats.items()},
-                        'epoch': epoch,
-                        'n_parameters': n_parameters}
+                **{f'test_{k}': v for k, v in test_stats.items()},
+                'epoch': epoch,
+                'n_parameters': n_parameters,
+                'S_nnz_pct_avg': avg_sparsity_pct}
         
         
         
