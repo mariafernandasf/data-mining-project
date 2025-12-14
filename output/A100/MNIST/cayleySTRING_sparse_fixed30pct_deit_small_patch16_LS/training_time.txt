@@ -1,0 +1,1 @@
+{"start_epoch": 61, "end_epoch": 100, "training_time_str": "2:32:02", "training_time_seconds": 9122.774470567703}
