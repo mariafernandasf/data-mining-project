@@ -88,11 +88,6 @@ def main(args):
     )
 
     # lambda weighting factor for sparse attention learnable variant
-    if args.data_set == "MNIST":
-        lambda_l0 = 0.1 / len(dataset_train)
-    else: 
-        lambda_l0 = 0.001 / len(dataset_train) # use CIFAR10 case for other datasets
-
     lambda_l0 = torch.tensor(1e-3, device=device)
     sparsity_lr = 1e-2
     sparsity_rho_max = 0.5 # ensures the matrix is sparse
@@ -266,7 +261,6 @@ def main(args):
             set_training_mode=args.train_mode,  # keep in eval mode for deit finetuning / train mode for training and deit III finetuning
             args = args, 
             global_step = global_step, 
-            sparse_learnable_variant = args.sparse_learnable_variant,
             lambda_l0 = lambda_l0, 
             sparsity_rho_max = sparsity_rho_max,
             sparsity_lr = sparsity_lr
@@ -360,7 +354,10 @@ if __name__ == '__main__':
     args = const.ARGS
 
     # add model name and dataset to output directory
-    args["output_dir"] = args["output_dir"] + args["data_set"] + "/" + args["model"]
+    if args["sparse_learnable_variant_use_constraint"]:
+        args["output_dir"] = args["output_dir"] + args["data_set"] + "/" + args["model"] + "_USE_sparse_constraint/"
+    else:
+        args["output_dir"] = args["output_dir"] + args["data_set"] + "/" + args["model"]
     print('\n\nOutput dir: {}\n\n'.format(args["output_dir"]))
 
     Path(args["output_dir"]).mkdir(parents=True, exist_ok=True)

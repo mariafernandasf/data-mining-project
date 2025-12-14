@@ -366,6 +366,74 @@ def cayleySTRING_reflection_deit_small_patch16_LS(pretrained=False, img_size=224
     model.default_cfg = _cfg()
     return model
 
+# -------- cayley-STRING Sparse Variants 16x16 Patch Models ------------
+
+# Cayley-STRING sparse-variant fixed f=45%
+@register_model
+def cayleySTRING_sparse_fixed45pct_deit_small_patch16_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
+    model = cayley_STRING_vit_models(
+        img_size = img_size, patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), block_layers=Cayley_STRING_Layer_scale_init_Block, 
+        Attention_block=partial(CayleySTRINGAttention, 
+                                sparse_variant_fixed_f=True,
+                                sparsity_f = 0.45),
+        rope_theta=100.0, **kwargs)
+    model.default_cfg = _cfg()
+    return model
+
+# Cayley-STRING sparse-variant fixed f=40%
+@register_model
+def cayleySTRING_sparse_fixed40pct_deit_small_patch16_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
+    model = cayley_STRING_vit_models(
+        img_size = img_size, patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), block_layers=Cayley_STRING_Layer_scale_init_Block, 
+        Attention_block=partial(CayleySTRINGAttention, 
+                                sparse_variant_fixed_f=True,
+                                sparsity_f = 0.4),
+        rope_theta=100.0, **kwargs)
+    model.default_cfg = _cfg()
+    return model
+
+# Cayley-STRING sparse-variant fixed f=35%
+@register_model
+def cayleySTRING_sparse_fixed35pct_deit_small_patch16_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
+    model = cayley_STRING_vit_models(
+        img_size = img_size, patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), block_layers=Cayley_STRING_Layer_scale_init_Block, 
+        Attention_block=partial(CayleySTRINGAttention, 
+                                sparse_variant_fixed_f=True,
+                                sparsity_f = 0.35),
+        rope_theta=100.0, **kwargs)
+    model.default_cfg = _cfg()
+    return model
+
+# Cayley-STRING sparse-variant fixed f=30%
+@register_model
+def cayleySTRING_sparse_fixed30pct_deit_small_patch16_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
+    model = cayley_STRING_vit_models(
+        img_size = img_size, patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), block_layers=Cayley_STRING_Layer_scale_init_Block, 
+        Attention_block=partial(CayleySTRINGAttention, 
+                                sparse_variant_fixed_f=True,
+                                sparsity_f = 0.3),
+        rope_theta=100.0, **kwargs)
+    model.default_cfg = _cfg()
+    return model
+
+# Cayley-STRING sparse-variant fixed f=25%
+@register_model
+def cayleySTRING_sparse_fixed25pct_deit_small_patch16_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
+    model = cayley_STRING_vit_models(
+        img_size = img_size, patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), block_layers=Cayley_STRING_Layer_scale_init_Block, 
+        Attention_block=partial(CayleySTRINGAttention, 
+                                sparse_variant_fixed_f=True,
+                                sparsity_f = 0.25,
+                                use_sparse_linear_solver=False),
+        rope_theta=100.0, **kwargs)
+    model.default_cfg = _cfg()
+    return model
+
 # Cayley-STRING sparse-variant fixed f=20%
 @register_model
 def cayleySTRING_sparse_fixed20pct_deit_small_patch16_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
@@ -379,15 +447,15 @@ def cayleySTRING_sparse_fixed20pct_deit_small_patch16_LS(pretrained=False, img_s
     model.default_cfg = _cfg()
     return model
 
-# Cayley-STRING sparse-variant fixed f=30%
+# Cayley-STRING sparse-variant fixed f=15%
 @register_model
-def cayleySTRING_sparse_fixed30pct_deit_small_patch16_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
+def cayleySTRING_sparse_fixed15pct_deit_small_patch16_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
     model = cayley_STRING_vit_models(
         img_size = img_size, patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), block_layers=Cayley_STRING_Layer_scale_init_Block, 
         Attention_block=partial(CayleySTRINGAttention, 
                                 sparse_variant_fixed_f=True,
-                                sparsity_f = 0.3,
+                                sparsity_f = 0.15,
                                 use_sparse_linear_solver=False),
         rope_theta=100.0, **kwargs)
     model.default_cfg = _cfg()
@@ -401,40 +469,29 @@ def cayleySTRING_sparse_fixed10pct_deit_small_patch16_LS(pretrained=False, img_s
         norm_layer=partial(nn.LayerNorm, eps=1e-6), block_layers=Cayley_STRING_Layer_scale_init_Block, 
         Attention_block=partial(CayleySTRINGAttention, 
                                 sparse_variant_fixed_f=True,
-                                sparsity_f = 0.1),
-        rope_theta=100.0, **kwargs)
-    model.default_cfg = _cfg()
-    return model
-
-# Cayley-STRING sparse-variant fixed f=40%
-@register_model
-def cayleySTRING_sparse_fixed40pct_deit_small_patch16_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
-    model = cayley_STRING_vit_models(
-        img_size = img_size, patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), block_layers=Cayley_STRING_Layer_scale_init_Block, 
-        Attention_block=partial(CayleySTRINGAttention, 
-                                sparse_variant_fixed_f=True,
-                                sparsity_f = 0.4,
+                                sparsity_f = 0.1,
                                 use_sparse_linear_solver=False),
         rope_theta=100.0, **kwargs)
     model.default_cfg = _cfg()
     return model
 
-# Cayley-STRING sparse-variant fixed f=35%
+
+
+# Cayley-STRING sparse-variant fixed f=5%
 @register_model
-def cayleySTRING_sparse_fixed35pct_deit_small_patch16_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
+def cayleySTRING_sparse_fixed5pct_deit_small_patch16_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
     model = cayley_STRING_vit_models(
         img_size = img_size, patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), block_layers=Cayley_STRING_Layer_scale_init_Block, 
         Attention_block=partial(CayleySTRINGAttention, 
                                 sparse_variant_fixed_f=True,
-                                sparsity_f = 0.35,
-                                use_sparse_linear_solver=False),
+                                sparsity_f = 0.05),
         rope_theta=100.0, **kwargs)
     model.default_cfg = _cfg()
     return model
 
-# Cayley-STRING sparse-variant fixed f=30%
+# ----------------- CAYLEY STRING LEARNABLE VARIANTS -----------------
+# Cayley-STRING LEARNABLE variant
 @register_model
 def cayleySTRING_sparse_learnable_deit_small_patch16_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
     model = cayley_STRING_vit_models(
@@ -445,25 +502,12 @@ def cayleySTRING_sparse_learnable_deit_small_patch16_LS(pretrained=False, img_si
                                 sparse_variant_learnable=True,
                                 tau = 1.0, # initialize gumbel sigmoid tau
                                 use_sparse_linear_solver=False),
-        rope_theta=100.0, sparse_variant_learnable = True, 
+        rope_theta=100.0 , #sparse_variant_learnable = True, 
         **kwargs)
     model.default_cfg = _cfg()
     return model
 
-# Cayley-STRING sparse-variant fixed f=15%
-@register_model
-def cayleySTRING_sparse_fixed15pct_deit_small_patch16_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
-    model = cayley_STRING_vit_models(
-        img_size = img_size, patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), block_layers=Cayley_STRING_Layer_scale_init_Block, 
-        Attention_block=partial(CayleySTRINGAttention, 
-                                sparse_variant_fixed_f=True,
-                                sparsity_f = 0.15),
-        rope_theta=100.0, **kwargs)
-    model.default_cfg = _cfg()
-    return model
-
-# ------------ 8x8 Patch Models ------------
+# ------------------------ 8x8 Patch Models ------------------------
 # Regular Cayley-STRING 8x8
 @register_model
 def cayleySTRING_regular_deit_small_patch8_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
@@ -481,34 +525,6 @@ def cayleySTRING_reflection_deit_small_patch8_LS(pretrained=False, img_size=224,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), block_layers=Cayley_STRING_Layer_scale_init_Block, 
         Attention_block=partial(CayleySTRINGAttention, 
                                 reflection_variant=True),
-        rope_theta=100.0, **kwargs)
-    model.default_cfg = _cfg()
-    return model
-
-# Cayley-STRING sparse-variant fixed f=20%
-@register_model
-def cayleySTRING_sparse_fixed20pct_deit_small_patch8_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
-    model = cayley_STRING_vit_models(
-        img_size = img_size, patch_size=8, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), block_layers=Cayley_STRING_Layer_scale_init_Block, 
-        Attention_block=partial(CayleySTRINGAttention, 
-                                sparse_variant_fixed_f=True,
-                                sparsity_f = 0.2,
-                                use_sparse_linear_solver=False),
-        rope_theta=100.0, **kwargs)
-    model.default_cfg = _cfg()
-    return model
-
-# Cayley-STRING sparse-variant fixed f=10%
-@register_model
-def cayleySTRING_sparse_fixed10pct_deit_small_patch8_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
-    model = cayley_STRING_vit_models(
-        img_size = img_size, patch_size=8, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), block_layers=Cayley_STRING_Layer_scale_init_Block, 
-        Attention_block=partial(CayleySTRINGAttention, 
-                                sparse_variant_fixed_f=True,
-                                sparsity_f = 0.1,
-                                use_sparse_linear_solver=False),
         rope_theta=100.0, **kwargs)
     model.default_cfg = _cfg()
     return model
@@ -536,6 +552,34 @@ def cayleySTRING_sparse_fixed30pct_deit_small_patch8_LS(pretrained=False, img_si
         Attention_block=partial(CayleySTRINGAttention, 
                                 sparse_variant_fixed_f=True,
                                 sparsity_f = 0.3,
+                                use_sparse_linear_solver=False),
+        rope_theta=100.0, **kwargs)
+    model.default_cfg = _cfg()
+    return model
+
+# Cayley-STRING sparse-variant fixed f=20%
+@register_model
+def cayleySTRING_sparse_fixed20pct_deit_small_patch8_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
+    model = cayley_STRING_vit_models(
+        img_size = img_size, patch_size=8, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), block_layers=Cayley_STRING_Layer_scale_init_Block, 
+        Attention_block=partial(CayleySTRINGAttention, 
+                                sparse_variant_fixed_f=True,
+                                sparsity_f = 0.2,
+                                use_sparse_linear_solver=False),
+        rope_theta=100.0, **kwargs)
+    model.default_cfg = _cfg()
+    return model
+
+# Cayley-STRING sparse-variant fixed f=10%
+@register_model
+def cayleySTRING_sparse_fixed10pct_deit_small_patch8_LS(pretrained=False, img_size=224, pretrained_21k = False,  **kwargs):
+    model = cayley_STRING_vit_models(
+        img_size = img_size, patch_size=8, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), block_layers=Cayley_STRING_Layer_scale_init_Block, 
+        Attention_block=partial(CayleySTRINGAttention, 
+                                sparse_variant_fixed_f=True,
+                                sparsity_f = 0.1,
                                 use_sparse_linear_solver=False),
         rope_theta=100.0, **kwargs)
     model.default_cfg = _cfg()

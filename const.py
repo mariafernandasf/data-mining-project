@@ -24,6 +24,7 @@ ARGS = {
         "epochs": 100, # num epochs
         "model" : "cayleySTRING_sparse_learnable_deit_small_patch16_LS",
         "sparse_learnable_variant": True, # whether to use sparse learnable attention variant
+        "sparse_learnable_variant_use_constraint": True,
         "drop"  : 0.0, # dropout rate
         "drop_path" : 0.0, # dropout path rate
         "bce_loss": True,

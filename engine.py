@@ -21,7 +21,6 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None,
                     set_training_mode=True, args = None, 
                     global_step = 0, 
-                    sparse_learnable_variant = False,
                     lambda_l0 = torch.tensor(1e-3),
                     r = 1e-5,
                     N_tau = 500,
@@ -42,7 +41,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         targets = targets.to(device, non_blocking=True)
 
         # update gumbel sigmoid tau for sparse attention
-        if (global_step % N_tau == 0) and sparse_learnable_variant:
+        if (global_step % N_tau == 0) and args.sparse_learnable_variant:
             tau = max(0.5, math.exp(-r * global_step))
             for blk in model.blocks:
                 if hasattr(blk, "attn"):
@@ -62,7 +61,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             task_loss = criterion(outputs, targets)
             
 
-            if sparse_learnable_variant:
+            if args.sparse_learnable_variant and args.sparse_learnable_variant_use_constraint:
                 
                 # sum L0 penalties over all attention blocks
                 rho = torch.zeros((), device=device)
@@ -76,6 +75,15 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 # by adding a ReLU wrapper we don't reward unnecessary sparsity
                 sparsity_penalty = lambda_l0 * torch.relu(constraint_violation)
                 loss = task_loss + sparsity_penalty
+            elif args.sparse_learnable_variant and not args.sparse_learnable_variant_use_constraint:
+                # sum L0 penalties over all attention blocks
+                sparsity_penalty = torch.tensor(0.0, device=device)
+                for blk in model.blocks:
+                    if hasattr(blk, "attn"):
+                        sparsity_penalty = sparsity_penalty + blk.attn.l0_penalty()
+                
+                loss = task_loss + (lambda_l0 * sparsity_penalty)
+                rho = torch.tensor(0.0, device=device) # unused
             else:
                 loss = task_loss
                 rho = torch.tensor(0.0, device=device)
@@ -95,7 +103,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         loss_scaler(loss, optimizer, clip_grad=max_norm,
                     parameters=model.parameters(), create_graph=is_second_order)
 
-        if sparse_learnable_variant:
+        if args.sparse_learnable_variant and args.sparse_learnable_variant_use_constraint:
             with torch.no_grad():
                 lambda_l0 = torch.clamp(lambda_l0 + sparsity_lr * constraint_violation.detach(), min=0.0)
 
