@@ -154,7 +154,7 @@ class CayleySTRINGAttention(Attention):
             z = z_soft + (z_hard - z_soft).detach()  
         
         else: # at eval use log_alpha, our learned mask, as the sparsity mask
-            z_hard = (torch.sigmoid(self.log_alpha) >= 0.5).float()
+            z_hard = (torch.sigmoid(self.log_alpha) > 0.5).float()
             z = z_hard
 
         z_ut = z * mask  # zero out lower triangular and diagonal

@@ -92,7 +92,7 @@ def main(args):
         lambda_l0 = 0.1 / len(dataset_train)
     else: 
         lambda_l0 = 0.001 / len(dataset_train) # use CIFAR10 case for other datasets
-
+    lambda_l0 = 1e-4 # start here
 
     if args.ThreeAugment:
         data_loader_train.dataset.transform = new_data_aug_generator(args)
