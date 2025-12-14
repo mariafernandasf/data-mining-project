@@ -285,17 +285,30 @@ def main(args):
         test_stats = evaluate(data_loader_val, model, device)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         # Log S sparsity for learnable sparse variant (average across attention blocks)
-        try:
-            sparsity_pcts = []
-            for m in model_without_ddp.modules():
-                if isinstance(m, models_cayley.CayleySTRINGAttention) and args.sparse_learnable_variant:
-                    pct = m.compute_s_nnz_percentage()
-                    if pct is not None:
-                        sparsity_pcts.append(pct)
-            avg_sparsity_pct = float(sum(sparsity_pcts) / len(sparsity_pcts)) if sparsity_pcts else None
-        except Exception:
-            avg_sparsity_pct = None
         
+        mask_train_pcts = []
+        S_train_pcts = []
+        mask_eval_pcts = []
+        S_eval_pcts = []
+        for m in model_without_ddp.modules():
+            if isinstance(m, models_cayley.CayleySTRINGAttention) and args.sparse_learnable_variant:
+                p_train_mask, p_eval_mask = m.last_mask_nnz_pct()
+                p_train_S, p_eval_S = m.last_S_nnz_pct()
+
+                if p_train_mask is not None:
+                    mask_train_pcts.append(p_train_mask)
+                if p_train_S is not None:
+                    S_train_pcts.append(p_train_S)
+                if p_eval_mask is not None:
+                    mask_eval_pcts.append(p_eval_mask)
+                if p_eval_S is not None:
+                    S_eval_pcts.append(p_eval_S)
+                    
+        avg_train_mask_pct = float(sum(mask_train_pcts) / len(mask_train_pcts)) if mask_train_pcts else None
+        avg_train_S_pct = float(sum(S_train_pcts) / len(S_train_pcts)) if S_train_pcts else None
+        avg_eval_mask_pct = float(sum(mask_eval_pcts) / len(mask_eval_pcts)) if mask_eval_pcts else None
+        avg_eval_S_pct = float(sum(S_eval_pcts) / len(S_eval_pcts)) if S_eval_pcts else None    
+
         if max_accuracy < test_stats["acc1"]:
             max_accuracy = test_stats["acc1"]
 
@@ -317,10 +330,10 @@ def main(args):
                 **{f'test_{k}': v for k, v in test_stats.items()},
                 'epoch': epoch,
                 'n_parameters': n_parameters,
-                'S_nnz_pct_avg': avg_sparsity_pct}
-        
-        
-        
+                'avg_train_mask_pct': avg_train_mask_pct,
+                'avg_train_S_pct': avg_train_S_pct,
+                'avg_eval_mask_pct': avg_eval_mask_pct,
+                'avg_eval_S_pct': avg_eval_S_pct}
         
         if utils.is_main_process():
             with (output_dir / "log.txt").open("a") as f:

@@ -55,17 +55,20 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
          
         with torch.amp.autocast('cuda'):
             outputs = model(samples)
-            loss = criterion(outputs, targets)
+            task_loss = criterion(outputs, targets)
+            sparsity_loss = 0.0
 
             if sparse_learnable_variant:
-                sparsity_loss = 0.0
+                
                 # sum L0 penalties over all attention blocks
                 for blk in model.blocks:
                     if hasattr(blk, "attn"):
                         sparsity_loss = sparsity_loss + blk.attn.l0_penalty()
                 
-                loss = loss + lambda_l0 * sparsity_loss 
-        
+                loss = task_loss + (lambda_l0 * sparsity_loss)
+            else:
+                loss = task_loss
+
         loss_value = loss.item()
 
         if not math.isfinite(loss_value):
@@ -84,6 +87,8 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             model_ema.update(model)
 
         metric_logger.update(loss=loss_value)
+        metric_logger.update(task_loss=task_loss.item())
+        metric_logger.update(sparsity_loss=sparsity_loss)
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
 
         global_step += 1

@@ -70,12 +70,15 @@ class CayleySTRINGAttention(Attention):
             self.register_buffer("col", col)
 
             nnz = row.numel()
+            # TODO: might need to change this to 0.01 * torch.randn, might cause training
+            # to blow up early on
             self.nnz_values = nn.Parameter(torch.randn(num_heads, nnz))
         
         elif self.sparse_variant_learnable:
-            self.values = nn.Parameter(torch.zeros(num_heads, head_dim, head_dim))
+            self.values = nn.Parameter(0.01 * torch.randn(num_heads, head_dim, head_dim))
             
-            # each head will have its own sparsity pattern
+            # each head will have its own sparsity pattern, want expected ON probability
+            # to be 50% for each cell at initialization
             self.log_alpha = nn.Parameter(torch.zeros(num_heads, head_dim, head_dim))
             self.tau = tau 
         else: 
@@ -134,50 +137,57 @@ class CayleySTRINGAttention(Attention):
         return S_head.coalesce()
 
     def S_cayley_sparse_learnable(self):
+        # upper triangular mask
         mask = torch.ones_like(self.log_alpha).triu(1)
 
         if self.training: 
+
             # uniform distribution on [0,1]
-            u = torch.rand_like(self.log_alpha)
-            gumbel = -torch.log(-torch.log(u + 1e-8) + 1e-8)
+            u = torch.rand_like(self.log_alpha).clamp_(1e-6, 1 - 1e-6)
+            logistic_noise = torch.log(u) - torch.log1p(-u)
 
             #  ~ Gumbel(log_alpha, tau)
-            logits = (self.log_alpha + gumbel) / self.tau
-        else: 
-            logits = self.log_alpha
-        
-        z_soft = torch.sigmoid(logits)
-        z_hard = (z_soft > 0.5).float()
-        z = z_hard + (z_soft - z_hard).detach()  
+            logits = (self.log_alpha + logistic_noise) / self.tau
 
-        z = z * mask  # zero out lower triangular and diagonal
+            z_soft = torch.sigmoid(logits)
+            z_hard = (z_soft >= 0.5).to(z_soft.dtype)
+            z = z_soft + (z_hard - z_soft).detach()  
+        
+        else: # at eval use log_alpha, our learned mask, as the sparsity mask
+            z_hard = (torch.sigmoid(self.log_alpha) >= 0.5).float()
+            z = z_hard
+
+        z_ut = z * mask  # zero out lower triangular and diagonal
+        z_hard_ut = z_hard * mask
 
         # get values for upper triangular
-        S = z * self.values.triu(1)
+        S_upper = z_ut * self.values.triu(1)
 
         # skew-symmetrize
-        S = S - S.transpose(-1, -2)
+        S = S_upper - S_upper.transpose(-1, -2)
+
+        with torch.no_grad():
+            mask_active_ut = z_hard_ut.sum(dim=(-1, -2))
+            mask_pct = ((mask_active_ut * 2.0) / (self.head_dim * self.head_dim)).mean().item()
+
+            eps = 1e-8
+            S_pct = ((S.abs() > eps).sum(dim=(-1, -2)) / (self.head_dim * self.head_dim)).mean().item()
+
+            if self.training:
+                self._last_train_mask_nnz_pct = mask_pct
+                self._last_train_S_nnz_pct = S_pct
+            else:
+                self._last_eval_mask_nnz_pct = mask_pct
+                self._last_eval_S_nnz_pct = S_pct
 
         return S
 
-
-    def compute_s_nnz_percentage(self):
-        """Return average nnz percentage of S across heads for learnable sparse variant.
-        Uses the hard threshold (sigmoid(log_alpha) > 0.5) over the strict upper triangle
-        to estimate the active edges; skew-symmetry doubles nnz. Returns None if not applicable.
-        """
-        if not self.sparse_variant_learnable:
-            return None
-        with torch.no_grad():
-            mask = torch.ones_like(self.log_alpha).triu(1)
-            z = (torch.sigmoid(self.log_alpha) > 0.5).float() * mask  # (H, D, D) upper-tri gates
-            per_head_active = z.sum(dim=(-1, -2))  # (H,)
-            nnz_per_head = per_head_active * 2.0  # skew-symmetry mirrors to lower-tri
-            total_entries = float(self.head_dim * self.head_dim)
-            pct_per_head = nnz_per_head / total_entries
-            avg_pct = pct_per_head.mean().item()
-        return avg_pct
-
+    def last_mask_nnz_pct(self):
+        return getattr(self, "_last_train_mask_nnz_pct", None), getattr(self, "_last_eval_mask_nnz_pct", None),
+    
+    def last_S_nnz_pct(self): 
+        return getattr(self, "_last_train_S_nnz_pct", None), getattr(self, "_last_eval_S_nnz_pct", None)
+    
     def apply_sparse_cayley_fixed_f(self, z):
         B, num_heads, N, head_dim = z.shape
         original_dtype = z.dtype
