@@ -22,9 +22,11 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     set_training_mode=True, args = None, 
                     global_step = 0, 
                     sparse_learnable_variant = False,
-                    lambda_l0 = 0.0,
+                    lambda_l0 = torch.tensor(1e-3),
                     r = 1e-5,
-                    N_tau = 500):
+                    N_tau = 500,
+                    sparsity_rho_max = 0.5, 
+                    sparsity_lr = 1e-2):
     
     # set model to training mode
     model.train(set_training_mode)
@@ -33,7 +35,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     header = 'Epoch: [{}]'.format(epoch)
     print_freq = 10
 
- 
+    lambda_l0 = torch.as_tensor(lambda_l0, device=device)
     i = 0
     for samples, targets in metric_logger.log_every(data_loader, print_freq, header):
         samples = samples.to(device, non_blocking=True)
@@ -52,22 +54,33 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             
         if args.bce_loss:
             targets = targets.gt(0.0).type(targets.dtype)
-         
+        
+
+
         with torch.amp.autocast('cuda'):
             outputs = model(samples)
             task_loss = criterion(outputs, targets)
-            sparsity_loss = 0.0
+            
 
             if sparse_learnable_variant:
                 
                 # sum L0 penalties over all attention blocks
+                rho = torch.zeros((), device=device)
+                count = 0
                 for blk in model.blocks:
-                    if hasattr(blk, "attn"):
-                        sparsity_loss = sparsity_loss + blk.attn.l0_penalty()
-                
-                loss = task_loss + (lambda_l0 * sparsity_loss)
+                    if hasattr(blk, "attn") and hasattr(blk.attn, "expected_nnz_pct"):
+                        rho = rho + blk.attn.expected_nnz_pct()
+                        count += 1
+                rho = rho / max(1, count)
+                constraint_violation = rho - sparsity_rho_max
+                # by adding a ReLU wrapper we don't reward unnecessary sparsity
+                sparsity_penalty = lambda_l0 * torch.relu(constraint_violation)
+                loss = task_loss + sparsity_penalty
             else:
                 loss = task_loss
+                rho = torch.tensor(0.0, device=device)
+                sparsity_penalty = torch.tensor(0.0, device=device)
+
 
         loss_value = loss.item()
 
@@ -82,20 +95,27 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         loss_scaler(loss, optimizer, clip_grad=max_norm,
                     parameters=model.parameters(), create_graph=is_second_order)
 
+        if sparse_learnable_variant:
+            with torch.no_grad():
+                lambda_l0 = torch.clamp(lambda_l0 + sparsity_lr * constraint_violation.detach(), min=0.0)
+
         torch.cuda.synchronize()
         if model_ema is not None:
             model_ema.update(model)
 
         metric_logger.update(loss=loss_value)
         metric_logger.update(task_loss=task_loss.item())
-        metric_logger.update(sparsity_loss=sparsity_loss)
+        metric_logger.update(sparsity_penalty=sparsity_penalty.item())
+        metric_logger.update(lambda_l0=lambda_l0.item())
+        metric_logger.update(rho=rho.item())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
+
 
         global_step += 1
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}, global_step
+    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}, global_step, lambda_l0.detach()
 
 
 @torch.no_grad()

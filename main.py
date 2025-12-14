@@ -92,7 +92,10 @@ def main(args):
         lambda_l0 = 0.1 / len(dataset_train)
     else: 
         lambda_l0 = 0.001 / len(dataset_train) # use CIFAR10 case for other datasets
-    lambda_l0 = 1e-4 # start here
+
+    lambda_l0 = torch.tensor(1e-3, device=device)
+    sparsity_lr = 1e-2
+    sparsity_rho_max = 0.5 # ensures the matrix is sparse
 
     if args.ThreeAugment:
         data_loader_train.dataset.transform = new_data_aug_generator(args)
@@ -256,7 +259,7 @@ def main(args):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
         # end distributed code
-        train_stats, global_step = train_one_epoch(
+        train_stats, global_step, lambda_l0 = train_one_epoch(
             model, criterion, data_loader_train,
             optimizer, device, epoch, loss_scaler,
             args.clip_grad, model_ema, mixup_fn,
@@ -264,7 +267,9 @@ def main(args):
             args = args, 
             global_step = global_step, 
             sparse_learnable_variant = args.sparse_learnable_variant,
-            lambda_l0 = lambda_l0
+            lambda_l0 = lambda_l0, 
+            sparsity_rho_max = sparsity_rho_max,
+            sparsity_lr = sparsity_lr
         )
 
         # update learning rate

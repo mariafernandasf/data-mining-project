@@ -79,7 +79,7 @@ class CayleySTRINGAttention(Attention):
             
             # each head will have its own sparsity pattern, want expected ON probability
             # to be 50% for each cell at initialization
-            self.log_alpha = nn.Parameter(torch.zeros(num_heads, head_dim, head_dim))
+            self.log_alpha = nn.Parameter(-0.1 * torch.ones(num_heads, head_dim, head_dim))
             self.tau = tau 
         else: 
             # S = M - M^T to ensure S is antisymmetric
@@ -97,6 +97,14 @@ class CayleySTRINGAttention(Attention):
         mask = torch.ones_like(self.log_alpha).triu(1)
         prob = torch.sigmoid(self.log_alpha) * mask
         return prob.sum()
+
+    def expected_nnz_pct(self):
+        # expected nnz% of full S (including both triangles), off-diagonal only
+        mask = torch.ones_like(self.log_alpha).triu(1)
+        p = torch.sigmoid(self.log_alpha) * mask
+        expected_nnz = 2.0 * p.sum(dim=(-1, -2))             # per head
+        pct = expected_nnz / float(self.head_dim * self.head_dim)
+        return pct.mean()  # scalar tensor
 
     def sparse_linear_solver(self, I_plus_S, z_head_T, B, N):
         I_plus_S = I_plus_S.to_sparse_csr()
