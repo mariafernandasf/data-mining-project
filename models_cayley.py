@@ -70,8 +70,6 @@ class CayleySTRINGAttention(Attention):
             self.register_buffer("col", col)
 
             nnz = row.numel()
-            # TODO: might need to change this to 0.01 * torch.randn, might cause training
-            # to blow up early on
             self.nnz_values = nn.Parameter(torch.randn(num_heads, nnz))
         
         elif self.sparse_variant_learnable:
