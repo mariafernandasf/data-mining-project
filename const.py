@@ -22,9 +22,9 @@ ARGS = {
         "resume": "", # resume from checkpoint i.e. output/A100/deit_small_patch16_LS/checkpoint.pth
         "start_epoch": 0, # epoch to resume from
         "epochs": 100, # num epochs
-        "model" : "cayleySTRING_sparse_learnable_deit_small_patch16_LS",
-        "sparse_learnable_variant": True, # whether to use sparse learnable attention variant
-        "sparse_learnable_variant_use_constraint": True,
+        "model" : "cayleySTRING_regular_deit_small_patch16_LS",
+        "sparse_learnable_variant": False, # whether to use sparse learnable attention variant
+        "sparse_learnable_variant_use_constraint": False,
         "drop"  : 0.0, # dropout rate
         "drop_path" : 0.0, # dropout path rate
         "bce_loss": True,

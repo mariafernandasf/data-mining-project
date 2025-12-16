@@ -177,6 +177,17 @@ def main(args):
         linear_scaled_lr = args.lr * args.batch_size * utils.get_world_size() / 512.0
         args.lr = linear_scaled_lr
 
+    if args.sparse_learnable_variant or args.sparse_learnable_variant_use_constraint:
+        if args.model != "cayleySTRING_sparse_learnable_deit_small_patch16_LS":
+            print("\n\n\n!!! ATTENTION !!!: You have set sparse_learnable_variant to True but are not using the cayleySTRING_sparse_learnable_deit_small_patch16_LS model. Please double check your settings.")
+            print("\nEXITING...\n\n\n")
+            return
+
+    if not args.sparse_learnable_variant and args.model == "cayleySTRING_sparse_learnable_deit_small_patch16_LS":
+            print("\n\n\n!!! ATTENTION !!!: You have set NOT sparse_learnable_variant to True but are using the cayleySTRING_sparse_learnable_deit_small_patch16_LS model. Please double check your settings.")
+            print("\nEXITING...\n\n\n")
+            return
+        
     # create optimizer and loss_scaler
     optimizer = create_optimizer(args, model_without_ddp)
     loss_scaler = NativeScaler()
